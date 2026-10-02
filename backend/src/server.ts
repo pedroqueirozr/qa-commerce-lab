@@ -1,5 +1,7 @@
 import express from "express";
 import { pool } from "./database.js";
+import { logError } from "./logger";
+import type { DatabaseError } from "pg";
 
 const app = express();
 const PORT = 3000;
@@ -33,6 +35,7 @@ app.get("/api/products", async (_req, res) => {
     res.status(200).json(result.rows);
   } catch (error) {
     console.error("Error fetching products:", error);
+    logError("DATABASE", "Error fetching products");
 
     res.status(500).json({
       error: "Internal server error"
@@ -41,14 +44,19 @@ app.get("/api/products", async (_req, res) => {
 });
 
 app.get("/api/products/search", async (req, res) => {
-
   try {
     const query = req.query.q;
 
-    if (typeof query !== "string" || query.trim().length === 0){
+    if (typeof query !== "string" || query.trim().length === 0) {
       return res.status(400).json({
         error: "Search query is required"
-      });//Ausente / vazio
+      });
+    }
+
+    if (query.trim().length < 3) {
+      return res.status(400).json({
+        error: "Search query must contain at least 3 characters"
+      });
     }
 
     const searchTerm = `%${query.trim()}%`;
@@ -76,6 +84,7 @@ app.get("/api/products/search", async (req, res) => {
     return res.status(200).json(result.rows);
   } catch (error) {
     console.error("Error searching products:", error);
+    logError("DATABASE", "Error searching products");
 
     return res.status(500).json({
       error: "Internal server error"
@@ -117,6 +126,7 @@ app.get("/api/products/suggestions", async (req, res) => {
     return res.status(200).json(result.rows);
   } catch (error) {
     console.error("Error fetching product suggestions:", error);
+    logError("DATABASE", "Error fetching product suggestions");
 
     return res.status(500).json({
       error: "Internal server error"
@@ -127,14 +137,13 @@ app.get("/api/products/suggestions", async (req, res) => {
 app.get("/api/products/:id", async (req, res) => {
   try {
     const { id } = req.params;
-
     const productId = Number(id);
 
     if (!Number.isInteger(productId) || productId <= 0) {
-     return res.status(400).json({
-     error: "Invalid product id"
-     });
-   }
+      return res.status(400).json({
+        error: "Invalid product id"
+      });
+    }
 
     const result = await pool.query(
       `
@@ -164,11 +173,119 @@ app.get("/api/products/:id", async (req, res) => {
     return res.status(200).json(result.rows[0]);
   } catch (error) {
     console.error("Error fetching product:", error);
+    logError("DATABASE", "Error fetching product");
 
     return res.status(500).json({
       error: "Internal server error"
     });
   }
+});
+
+app.post("/api/products", async (req, res) => {
+  const { name, description, price, stock, sku } = req.body;
+
+  let normalizedDescription = null;
+
+  if (typeof name !== "string") {
+    return res.status(400).json({
+      error: "Product name is required"
+    });
+  }
+
+  const normalizedName = name.trim();
+
+  if (normalizedName.length === 0) {
+    return res.status(400).json({
+      error: "Product name entered incorrectly"
+    });
+  }
+
+  if (typeof price !== "number" || price < 0 || Number.isNaN(price)) {
+    return res.status(400).json({
+      error: "The value cannot be negative or written out in words"
+    });
+  }
+
+  if (
+    typeof stock !== "number" ||
+    Number.isNaN(stock) ||
+    stock < 0 ||
+    !Number.isInteger(stock)
+  ) {
+    return res.status(400).json({
+      error: "The stock must be a non-negative integer or cannot written out in words"
+    });
+  }
+
+  if (typeof sku !== "string") {
+    return res.status(400).json({
+      error: "Product SKU is required"
+    });
+  }
+
+  const normalizedSku = sku.trim();
+
+  if (normalizedSku.length === 0) {
+    return res.status(400).json({
+      error: "SKU entered incorrectly"
+    });
+  }
+
+  if (description !== undefined && description !== null) {
+    if (typeof description !== "string") {
+      return res.status(400).json({
+        error: "Invalid description format"
+      });
+    }
+
+    if (description.trim().length >= 1) {
+      normalizedDescription = description.trim();
+    }
+  }
+
+  try {
+    const result = await pool.query(
+      `
+        INSERT INTO products (
+          name,
+          description,
+          price,
+          stock,
+          sku
+        )
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING *
+      `,
+      [
+        normalizedName,
+        normalizedDescription,
+        price,
+        stock,
+        normalizedSku
+      ]
+    );
+
+    return res.status(201).json(result.rows[0]);
+  }  catch (error) {
+  console.error("Error creating product:", error);
+
+  const dbError = error as DatabaseError;
+
+  if (
+    dbError.code === "23505" &&
+    dbError.constraint === "products_sku_key"
+  ) {
+    return res.status(409).json({
+      error: "Product SKU already exists"
+    });
+  }
+
+  logError("DATABASE", "Error creating product");
+
+  return res.status(500).json({
+    error: "Internal server error"
+  });
+}
 });
 
 app.listen(PORT, () => {
