@@ -1,6 +1,6 @@
 import express from "express";
 import { pool } from "./database.js";
-import { logError } from "./logger";
+import { logError, logInfo, logWarn } from "./logger";
 import type { DatabaseError } from "pg";
 
 const app = express();
@@ -187,6 +187,11 @@ app.post("/api/products", async (req, res) => {
   let normalizedDescription = null;
 
   if (typeof name !== "string") {
+    logWarn(
+      "VALIDATION",
+      "Product creation rejected: missing or invalid name"
+    );
+
     return res.status(400).json({
       error: "Product name is required"
     });
@@ -195,12 +200,22 @@ app.post("/api/products", async (req, res) => {
   const normalizedName = name.trim();
 
   if (normalizedName.length === 0) {
+    logWarn(
+      "VALIDATION",
+      "Product creation rejected: empty name"
+    );
+
     return res.status(400).json({
       error: "Product name entered incorrectly"
     });
   }
 
   if (typeof price !== "number" || price < 0 || Number.isNaN(price)) {
+    logWarn(
+      "VALIDATION",
+      "Product creation rejected: invalid price"
+    );
+
     return res.status(400).json({
       error: "The value cannot be negative or written out in words"
     });
@@ -212,12 +227,22 @@ app.post("/api/products", async (req, res) => {
     stock < 0 ||
     !Number.isInteger(stock)
   ) {
+    logWarn(
+      "VALIDATION",
+      "Product creation rejected: invalid stock"
+    );
+
     return res.status(400).json({
       error: "The stock must be a non-negative integer or cannot written out in words"
     });
   }
 
   if (typeof sku !== "string") {
+    logWarn(
+      "VALIDATION",
+      "Product creation rejected: missing or invalid SKU"
+    );
+
     return res.status(400).json({
       error: "Product SKU is required"
     });
@@ -226,6 +251,11 @@ app.post("/api/products", async (req, res) => {
   const normalizedSku = sku.trim();
 
   if (normalizedSku.length === 0) {
+    logWarn(
+      "VALIDATION",
+      "Product creation rejected: empty SKU"
+    );
+
     return res.status(400).json({
       error: "SKU entered incorrectly"
     });
@@ -233,6 +263,11 @@ app.post("/api/products", async (req, res) => {
 
   if (description !== undefined && description !== null) {
     if (typeof description !== "string") {
+      logWarn(
+        "VALIDATION",
+        "Product creation rejected: invalid description"
+      );
+
       return res.status(400).json({
         error: "Invalid description format"
       });
@@ -266,28 +301,34 @@ app.post("/api/products", async (req, res) => {
     );
 
     return res.status(201).json(result.rows[0]);
-  }  catch (error) {
-  console.error("Error creating product:", error);
+  } catch (error) {
+    console.error("Error creating product:", error);
 
-  const dbError = error as DatabaseError;
+    const dbError = error as DatabaseError;
 
-  if (
-    dbError.code === "23505" &&
-    dbError.constraint === "products_sku_key"
-  ) {
-    return res.status(409).json({
-      error: "Product SKU already exists"
+    if (
+      dbError.code === "23505" &&
+      dbError.constraint === "products_sku_key"
+    ) {
+      logWarn(
+        "PRODUCT",
+        "Product creation rejected: duplicate SKU"
+      );
+
+      return res.status(409).json({
+        error: "Product SKU already exists"
+      });
+    }
+
+    logError("DATABASE", "Error creating product");
+
+    return res.status(500).json({
+      error: "Internal server error"
     });
   }
-
-  logError("DATABASE", "Error creating product");
-
-  return res.status(500).json({
-    error: "Internal server error"
-  });
-}
 });
 
 app.listen(PORT, () => {
   console.log(`QA Commerce API running on port ${PORT}`);
+  logInfo("SERVER", `QA Commerce API started on port ${PORT}`);
 });
