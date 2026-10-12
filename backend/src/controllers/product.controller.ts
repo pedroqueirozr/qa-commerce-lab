@@ -1,27 +1,19 @@
 import type { Request, Response } from "express";
 import type { DatabaseError } from "pg";
-import { pool } from "../database.js";
 import { logError, logWarn } from "../logger";
+import {
+  findAllActiveProducts,
+  searchActiveProducts,
+  findProductSuggestions,
+  findActiveProductById,
+  insertProduct
+} from "../repositories/product.repository.js";
 
 export async function listProducts(_req: Request, res: Response) {
   try {
-    const result = await pool.query(`
-      SELECT
-        id,
-        name,
-        description,
-        price,
-        stock,
-        sku,
-        active,
-        created_at,
-        updated_at
-      FROM products
-      WHERE active = TRUE
-      ORDER BY id
-    `);
+    const products = await findAllActiveProducts();
 
-    return res.status(200).json(result.rows);
+    return res.status(200).json(products);
   } catch (error) {
     console.error("Error fetching products:", error);
     logError("DATABASE", "Error fetching products");
@@ -48,29 +40,9 @@ export async function searchProducts(req: Request, res: Response) {
       });
     }
 
-    const searchTerm = `%${query.trim()}%`;
+    const products = await searchActiveProducts(query.trim());
 
-    const result = await pool.query(
-      `
-        SELECT
-          id,
-          name,
-          description,
-          price,
-          stock,
-          sku,
-          active,
-          created_at,
-          updated_at
-        FROM products
-        WHERE active = TRUE
-          AND name ILIKE $1
-        ORDER BY name
-      `,
-      [searchTerm]
-    );
-
-    return res.status(200).json(result.rows);
+    return res.status(200).json(products);
   } catch (error) {
     console.error("Error searching products:", error);
     logError("DATABASE", "Error searching products");
@@ -97,22 +69,9 @@ export async function getProductSuggestions(req: Request, res: Response) {
       });
     }
 
-    const result = await pool.query(
-      `
-        SELECT
-          id,
-          name,
-          sku
-        FROM products
-        WHERE active = TRUE
-          AND name ILIKE $1
-        ORDER BY name
-        LIMIT 10
-      `,
-      [`%${query.trim()}%`]
-    );
+    const suggestions = await findProductSuggestions(query.trim());
 
-    return res.status(200).json(result.rows);
+    return res.status(200).json(suggestions);
   } catch (error) {
     console.error("Error fetching product suggestions:", error);
     logError("DATABASE", "Error fetching product suggestions");
@@ -122,6 +81,8 @@ export async function getProductSuggestions(req: Request, res: Response) {
     });
   }
 }
+
+
 
 export async function getProductById(req: Request, res: Response) {
   try {
@@ -134,37 +95,20 @@ export async function getProductById(req: Request, res: Response) {
       });
     }
 
-    const result = await pool.query(
-      `
-        SELECT
-          id,
-          name,
-          description,
-          price,
-          stock,
-          sku,
-          active,
-          created_at,
-          updated_at
-        FROM products
-        WHERE id = $1
-          AND active = TRUE
-      `,
-      [productId]
-    );
+    const product = await findActiveProductById(productId);
 
-    if (result.rows.length === 0) {
+    if (product === null) {
       return res.status(404).json({
         error: "Product not found"
       });
     }
 
-    return res.status(200).json(result.rows[0]);
+    return res.status(200).json(product);
   } catch (error) {
-    console.error("Error fetching product:", error);
-    logError("DATABASE", "Error fetching product");
+      console.error("Error fetching product:", error);
+      logError("DATABASE", "Error fetching product");
 
-    return res.status(500).json({
+      return res.status(500).json({
       error: "Internal server error"
     });
   }
@@ -266,30 +210,16 @@ export async function createProduct(req: Request, res: Response) {
       normalizedDescription = description.trim();
     }
   }
-
   try {
-    const result = await pool.query(
-      `
-        INSERT INTO products (
-          name,
-          description,
-          price,
-          stock,
-          sku
-        )
-        VALUES ($1, $2, $3, $4, $5)
-        RETURNING *
-      `,
-      [
-        normalizedName,
-        normalizedDescription,
-        price,
-        stock,
-        normalizedSku
-      ]
+    const product = await insertProduct(
+      normalizedName,
+      normalizedDescription,
+      price,
+      stock,
+      normalizedSku
     );
 
-    return res.status(201).json(result.rows[0]);
+    return res.status(201).json(product);
   } catch (error) {
     console.error("Error creating product:", error);
 
@@ -315,4 +245,4 @@ export async function createProduct(req: Request, res: Response) {
       error: "Internal server error"
     });
   }
-};
+}
