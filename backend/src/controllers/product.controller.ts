@@ -1,3 +1,4 @@
+
 import type { Request, Response } from "express";
 import type { DatabaseError } from "pg";
 import { logError, logWarn } from "../logger";
@@ -82,8 +83,6 @@ export async function getProductSuggestions(req: Request, res: Response) {
   }
 }
 
-
-
 export async function getProductById(req: Request, res: Response) {
   try {
     const { id } = req.params;
@@ -105,10 +104,10 @@ export async function getProductById(req: Request, res: Response) {
 
     return res.status(200).json(product);
   } catch (error) {
-      console.error("Error fetching product:", error);
-      logError("DATABASE", "Error fetching product");
+    console.error("Error fetching product:", error);
+    logError("DATABASE", "Error fetching product");
 
-      return res.status(500).json({
+    return res.status(500).json({
       error: "Internal server error"
     });
   }
@@ -119,6 +118,7 @@ export async function createProduct(req: Request, res: Response) {
 
   let normalizedDescription = null;
 
+  // Validate product name
   if (typeof name !== "string") {
     logWarn(
       "VALIDATION",
@@ -143,17 +143,55 @@ export async function createProduct(req: Request, res: Response) {
     });
   }
 
-  if (typeof price !== "number" || price < 0 || Number.isNaN(price)) {
+  // Validate price type
+  if (!Number.isFinite(price)) {
     logWarn(
       "VALIDATION",
-      "Product creation rejected: invalid price"
+      "Product creation rejected: invalid price type"
     );
 
     return res.status(400).json({
-      error: "The value cannot be negative or written out in words"
+      error: "Product price must be a finite number"
     });
   }
 
+  // Validate negative price
+  if (price < 0) {
+    logWarn(
+      "VALIDATION",
+      "Product creation rejected: negative price"
+    );
+
+    return res.status(400).json({
+      error: "Product price cannot be negative"
+    });
+  }
+
+  // Validate maximum price
+  if (price > 999999.99) {
+    logWarn(
+      "VALIDATION",
+      "Product creation rejected: price exceeds maximum"
+    );
+
+    return res.status(400).json({
+      error: "Product price cannot exceed 999999.99 BRL"
+    });
+  }
+
+  // Validate decimal precision
+  if (price !== Number(price.toFixed(2))) {
+    logWarn(
+      "VALIDATION",
+      "Product creation rejected: price exceeds decimal precision"
+    );
+
+    return res.status(400).json({
+      error: "Product price must have a maximum of 2 decimal places"
+    });
+  }
+
+  // Validate stock
   if (
     typeof stock !== "number" ||
     Number.isNaN(stock) ||
@@ -170,6 +208,7 @@ export async function createProduct(req: Request, res: Response) {
     });
   }
 
+  // Validate SKU
   if (typeof sku !== "string") {
     logWarn(
       "VALIDATION",
@@ -194,6 +233,7 @@ export async function createProduct(req: Request, res: Response) {
     });
   }
 
+  // Validate optional description
   if (description !== undefined && description !== null) {
     if (typeof description !== "string") {
       logWarn(
@@ -210,6 +250,8 @@ export async function createProduct(req: Request, res: Response) {
       normalizedDescription = description.trim();
     }
   }
+
+  // Persist product
   try {
     const product = await insertProduct(
       normalizedName,
