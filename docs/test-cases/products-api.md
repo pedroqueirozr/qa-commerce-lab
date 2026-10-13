@@ -59,24 +59,50 @@ Os seguintes cenários foram executados manualmente durante o desenvolvimento e 
 
 **Nota:** antes da correção, um preço acima da capacidade do banco produziu erro `500`; após a implementação da validação de limite, `1000000` passou a retornar `400` conforme a regra.
 
-## Verificações complementares pendentes
+## Execução complementar — 12/10/2026 (-03:00)
+
+Evidências manuais fornecidas em 12/10/2026, com respostas HTTP, logs e consultas no DBeaver. As datas HTTP aparecem em 13/10/2026 UTC.
+
+| Caso | Entrada | Evidência | Resultado |
+|---|---|---|---|
+| CT-PRICE-01 | `999999.98` | Cadastro ID 33, preço retornado `"999999.98"`; cabeçalho de status não incluído no trecho | APROVADO quanto ao corpo |
+| CT-PRICE-02 | `999999.991` | HTTP 400, erro `Product price cannot exceed 999999.99 BRL`, `WARN VALIDATION / price exceeds maximum` | APROVADO |
+| CT-PRICE-03 | `price` ausente | HTTP 400, erro `Product price must be a finite number`, `WARN VALIDATION / invalid price type` | APROVADO |
+| CT-PRICE-04 | `null` | HTTP 400, mesmo erro e WARN de tipo inválido | APROVADO |
+| CT-PRICE-05 | `true` | HTTP 400, mesmo erro e WARN de tipo inválido | APROVADO |
+| CT-PRICE-06 | Objeto `{"value":1499.99}` | HTTP 400, mesmo erro e WARN de tipo inválido | APROVADO |
+| CT-JSON-01 | JSON com vírgula final | HTTP 400 confirmado em execução adicional; resposta HTML com stack trace do parser; sem novo WARN de Controller no trecho fornecido | APROVADO quanto à rejeição; melhoria de tratamento de erros |
+| CT-PRICE-07 | `1499` | Cadastro ID 34, preço `"1499.00"`; cabeçalho de status não incluído no trecho | APROVADO quanto ao corpo |
+| CT-PRICE-08 | `1499.9` | HTTP 201, ID 35, preço `"1499.90"` | APROVADO |
+| CT-PRICE-09 | `100000000` | HTTP 400, erro de máximo, `WARN VALIDATION / price exceeds maximum`; sem novo ERROR no trecho fornecido | APROVADO |
+| CT-PRICE-10 | `"1.499,90"` | HTTP 400, erro de número finito, `WARN VALIDATION / invalid price type` | APROVADO |
+
+**Integridade:** primeira consulta ao PostgreSQL com seis SKUs rejeitados retornou zero linhas. Segunda consulta encontrou somente os dois produtos válidos (IDs 34 e 35), sem os SKUs `TEST-PRICE-OVERFLOW-001` e `TEST-PRICE-BRL-STRING-001`.
+
+**Build:** `npm run build` executou `tsc` sem erros informados. O log também mostrou nova inicialização da API antes dos testes finais. O commit funcional já publicado é `67d836a`.
+
+**Limitações da evidência:** não houve auditoria completa dos logs nem instrumentação para comprovar diretamente que cada rejeição evitou executar a consulta de INSERT; a ausência de persistência foi confirmada para os SKUs consultados. Os casos `1499.90` e `1499.9` são equivalentes como números JSON. O caso `999999.991` viola tanto o teto quanto a precisão, e foi rejeitado pela regra do teto, conforme a ordem atual das validações.
+
+**Melhoria independente:** padronizar a resposta para JSON malformado e evitar exposição de stack trace/caminhos internos ao cliente, especialmente em produção.
+
+## Verificações complementares e fechamento
 
 - [x] Reexecutar CT-PROD-A a CT-PROD-N após as alterações, com novos SKUs nos cenários positivos.
 - [x] Confirmar HTTP, corpo JSON e log de preço negativo na versão corrigida.
-- [ ] Testar preço imediatamente abaixo do máximo (`999999.98`) e três casas decimais próximas do limite (`999999.991`).
-- [ ] Confirmar por consulta ao PostgreSQL que entradas rejeitadas não persistiram.
-- [ ] Testar preço ausente, `null`, booleano e objeto, esperando HTTP `400` e erro de número finito.
-- [ ] Verificar JSON sintaticamente inválido e distinguir falha do parser HTTP de validação do Controller.
-- [ ] Revisar ausência de `ERROR DATABASE` para todas as rejeições esperadas.
-- [ ] Registrar execução final de `npm run build` e reinicialização do servidor na mesma versão que será commitada (builds anteriores foram informados como aprovados).
+- [x] Testar preço imediatamente abaixo do máximo (`999999.98`) e três casas decimais próximas do limite (`999999.991`).
+- [x] Confirmar por consulta ao PostgreSQL que os SKUs rejeitados consultados não persistiram.
+- [x] Testar preço ausente, `null`, booleano e objeto, esperando HTTP `400` e erro de número finito.
+- [x] Verificar JSON sintaticamente inválido e distinguir falha do parser HTTP de validação do Controller.
+- [ ] Auditoria integral do log para ausência de `ERROR DATABASE` em todas as rejeições (não realizada; trechos fornecidos não mostraram novo ERROR).
+- [x] Registrar `npm run build` sem erros e evidência de reinicialização da API; não houve nova alteração funcional após o commit `67d836a`.
 
 ## Resumo de QA e decisão
 
 - **Histórico anterior à Issue #4:** 14/14 aprovados.
 - **Regressão manual pós-alteração:** 14/14 aprovados.
 - **Testes principais de limites, tipo e precisão da Issue #4:** aprovados nos cenários executados.
-- **Verificações complementares:** pendentes, conforme checklist acima.
-- **Conclusão:** nenhuma regressão identificada na suíte funcional executada; encerramento da Issue #4 e commit dependem de decisão sobre as verificações complementares e revisão final do código/documentação.
+- **Verificações complementares:** executadas conforme seção acima; permanece pendente apenas auditoria integral dos logs.
+- **Conclusão:** correção aprovada nos cenários executados; commit funcional `67d836a` já publicado. Encerramento da Issue #4 sujeito à revisão final dos critérios e da documentação.
 
 ## Observações técnicas
 
@@ -84,4 +110,4 @@ Os seguintes cenários foram executados manualmente durante o desenvolvimento e 
 2. O cabeçalho HTTP `Date` é apresentado em GMT/UTC.
 3. A definição futura do contrato monetário da API pode considerar representação explícita de valores decimais; atualmente o driver `pg` retorna `NUMERIC` como string.
 4. Logs `INFO` de cadastros bem-sucedidos e avaliação de desempenho do logger pertencem à Issue #5.
-5. Este arquivo é uma versão revisada para substituição local, não uma atualização automática do GitHub.
+5. Esta documentação é mantida no repositório GitHub; evidências foram consolidadas a partir das execuções manuais apresentadas.
