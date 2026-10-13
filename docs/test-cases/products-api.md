@@ -111,3 +111,25 @@ Evidências manuais fornecidas em 12/10/2026, com respostas HTTP, logs e consult
 3. A definição futura do contrato monetário da API pode considerar representação explícita de valores decimais; atualmente o driver `pg` retorna `NUMERIC` como string.
 4. Logs `INFO` de cadastros bem-sucedidos e avaliação de desempenho do logger pertencem à Issue #5.
 5. Esta documentação é mantida no repositório GitHub; evidências foram consolidadas a partir das execuções manuais apresentadas.
+
+## Issue #6 — Tratamento de JSON malformado
+
+**Execução:** 13/10/2026, horário local UTC-03:00.
+
+**Objetivo:** garantir que requisições com JSON malformado recebam uma resposta padronizada, sem exposição de stack trace, preservando o comportamento das rotas existentes.
+
+| Caso | Cenário | HTTP | Evidência | Resultado |
+|---|---|---|---|---|
+| CT-JSON-02 | JSON malformado (`"price":1499,90`) | 400 | `{"error":"Invalid JSON payload"}`; `Content-Type: application/json`; ausência de HTML e stack trace; `WARN VALIDATION` | APROVADO |
+| CT-ISSUE6-01 | Cadastro válido | 201 | ID 36; SKU `TEST-ISSUE6-001`; preço `"1499.90"` | APROVADO |
+| CT-ISSUE6-02 | Preço negativo (`-10`) | 400 | `Product price cannot be negative`; `WARN VALIDATION` | APROVADO |
+| CT-ISSUE6-03 | SKU duplicado (`TEST-ISSUE6-001`) | 409 | `Product SKU already exists`; `WARN PRODUCT` | APROVADO |
+
+**Resultado:** 4/4 cenários aprovados.
+
+**Validação técnica:** `npm run build` e `git diff --check` executados sem erros.
+
+**Conclusão:** o middleware reconhece `entity.parse.failed`, retorna HTTP 400 em JSON e registra `WARN VALIDATION`. As regressões direcionadas não identificaram alterações nos contratos HTTP 201, 400 e 409.
+
+**Limitações:** não foi realizado teste específico de erro inesperado encaminhado por `next(err)`, nem uma regressão completa de todos os endpoints.
+
