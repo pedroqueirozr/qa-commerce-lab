@@ -1,7 +1,7 @@
 
 import type { Request, Response } from "express";
 import type { DatabaseError } from "pg";
-import { logError, logWarn } from "../logger";
+import { logError, logWarn, logInfo } from "../logger";
 import {
   findAllActiveProducts,
   searchActiveProducts,
@@ -259,6 +259,11 @@ export async function createProduct(req: Request, res: Response) {
       price,
       stock,
       normalizedSku
+    );
+
+    logInfo(
+      "PRODUCT",
+      `Product created successfully: ID ${product.id} - SKU ${product.sku}`
     );
 
     return res.status(201).json(product);

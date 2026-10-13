@@ -36,7 +36,6 @@ app.use((
   next(err);
 });
 
-
 app.listen(PORT, () => {
   console.log(`QA Commerce API running on port ${PORT}`);
   logInfo("SERVER", `QA Commerce API started on port ${PORT}`);

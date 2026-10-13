@@ -133,3 +133,26 @@ Evidências manuais fornecidas em 12/10/2026, com respostas HTTP, logs e consult
 
 **Limitações:** não foi realizado teste específico de erro inesperado encaminhado por `next(err)`, nem uma regressão completa de todos os endpoints.
 
+## Issue #5 — Registro INFO de cadastro bem-sucedido
+
+**Execução:** 13/10/2026, horário local UTC-03:00.
+
+**Objetivo:** confirmar que o cadastro bem-sucedido registra `INFO PRODUCT`, preservando os logs de rejeição e os contratos HTTP existentes.
+
+| Caso | Cenário | HTTP | Evidência | Resultado |
+|---|---|---|---|---|
+| CT-LOG-01 | Cadastro válido, SKU `TEST-LOG-INFO-001` | Não apresentado no cabeçalho enviado | Produto ID 38 persistido; resposta JSON válida; `INFO PRODUCT` com ID 38 e SKU correspondente | APROVADO quanto às evidências disponíveis |
+| CT-LOG-02 | SKU duplicado | 409 | `Product SKU already exists`; `WARN PRODUCT`; nenhum novo INFO de sucesso observado | APROVADO |
+| CT-LOG-03 | Preço negativo (`-10`) | 400 | `Product price cannot be negative`; `WARN VALIDATION`; nenhum novo INFO de sucesso observado | APROVADO |
+
+**Resultado:** três cenários executados, com comportamento de logging esperado observado.
+
+**Log de sucesso confirmado:**
+
+`2026-10-13 10:42:24 -03:00 INFO PRODUCT Product created successfully: ID 38 - SKU TEST-LOG-INFO-001`
+
+**Validação técnica:** compilação TypeScript executada sem erros após a implementação.
+
+**Limitações:** não foi provocado erro interno HTTP 500 para testar o comportamento do logger nesse cenário. A avaliação de desempenho de `appendFileSync()` permanece pendente e não faz parte desta implementação inicial.
+
+**Conclusão:** os testes direcionados confirmaram o registro de sucesso após a inserção e a preservação dos registros WARN nos cenários de rejeição.
